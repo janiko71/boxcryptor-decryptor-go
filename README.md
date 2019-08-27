@@ -39,6 +39,6 @@ You need to _go get_ them.
 ## So,what is my conclusion?
 Again I'm proud of myself: I've learned Go and this program works!
 
-Besides, I can see that Boxcryptor do what they say: they have implemented a zero-knowledge solution. That means that, without your password, nobody can decrypt your files, even them. But as usual, the ultimate proof of confidence would be to assess that your password is stored anywhere... 
+Besides, I can see that Boxcryptor does what their authors says: they have implemented a zero-knowledge solution. That means that, without your password, nobody can decrypt your files, even them. But as usual, the ultimate proof of confidence would be to assess that your password is stored anywhere... 
 
 With my laptop, I've decrypted an .iso file (1.9Go) in 24 sec. Of course it's quicker than Python (which is interpreted, not compiled).

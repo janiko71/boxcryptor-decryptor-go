@@ -4,6 +4,7 @@ import (
 	"boxcryptor/datafile"
 	"boxcryptor/exportkey"
 	"boxcryptor/res"
+	"bufio"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hmac"
@@ -14,7 +15,6 @@ import (
 	"crypto/sha512"
 	"crypto/x509"
 	"encoding/base64"
-	"encoding/hex"
 	"flag"
 	"fmt"
 	"os"
@@ -148,13 +148,14 @@ func main() {
 	// ---------------------------------
 
 	//
-	// Public key
+	// Public key (in fact not used for decryption)
 	// ===============
 	//
 	// RSA-4096 key is in DER format
 	// 738 base64 (6-bits) = 123 bytes
 	//
-	publicKey, errPK := x509.ParsePKIXPublicKey(bc.PublicKeyBytes)
+	_, errPK := x509.ParsePKIXPublicKey(bc.PublicKeyBytes)
+	// Should be: publicKey, errPK := x509.ParsePKIXPublicKey(bc.PublicKeyBytes)
 	if errPK != nil {
 		fmt.Println("Bad Public Key in the export key file.")
 	} else {
@@ -264,7 +265,7 @@ func main() {
 	res.PrintParameter("Private Key decryption ", "OK")
 
 	//
-	// Read the data file (encrypted, with header)
+	// Read the data file (encrypted, with header) and display some datas
 	//
 
 	f := datafile.Read(dataFileName, Debug)
@@ -335,54 +336,70 @@ func main() {
 	t0 := time.Now()
 
 	// Do it now
-	f_in, err_in := os.Open(dataFileName)
-	res.CheckErr(err_in)
-	f_out, err_out := os.OpenFile(decryptedFileName, os.O_CREATE, f.OsFileMode)
-	res.CheckErr(err_out)
 
-	defer f_in.Close()
-	defer f_out.Close()
+	// File in (read, encrypted)
+	fileIn, errIn := os.Open(dataFileName)
+	res.CheckErr(errIn)
+	r := bufio.NewReader(fileIn)
+
+	// File out (write, unencrypted)
+	fileOut, errOut := os.OpenFile(decryptedFileName, os.O_CREATE, f.OsFileMode)
+	res.CheckErr(errOut)
+	w := bufio.NewWriter(fileOut)
+
+	// At end end, we close the files
+	defer fileIn.Close()
+	defer fileOut.Close()
 
 	// Read the 1st block (header), not used here
-	buff_in := make([]byte, offset)
-	f_in.Read(buff_in)
+	buffileIn := make([]byte, offset)
+	r.Read(buffileIn)
 
 	// Now read the blocks
-	//block := make([]byte, f.CipherBlocksize)
 	blockIV := make([]byte, len(f.CipherInitVector))
+	block, errC := aes.NewCipher(AESCryptoKey)
 
-	block, err_c := aes.NewCipher(AESCryptoKey)
-
-	if err_c == nil {
+	if errC == nil {
 
 		for i := 1; i < nbBlocks+1; i++ {
-			buff_in := make([]byte, f.CipherBlocksize)
-			buff_out := make([]byte, f.CipherBlocksize)
-			f_in.Read(buff_in)
+
+			// Prepare bytes blocks
+			buffileIn := make([]byte, f.CipherBlocksize)
+			buffileOut := make([]byte, f.CipherBlocksize)
+			r.Read(buffileIn)
+
 			// Compute block IV, derived from IV
 			blockIV = res.ComputeBlockIV(f.CipherInitVector, i-1, AESCryptoKey)
 			mode := cipher.NewCBCDecrypter(block, blockIV)
-			mode.CryptBlocks(buff_out, buff_in)
+			mode.CryptBlocks(buffileOut, buffileIn)
+
 			if i == nbBlocks {
+
+				// Exception: the last block may have smaller size
 				lastBlockLength := encryptedDataLength - (nbBlocks-1)*f.CipherBlocksize
-				fmt.Println("Lest block length", lastBlockLength)
+				fmt.Println("Last block size is", lastBlockLength)
 				lastBlockBuff := make([]byte, lastBlockLength)
-				copy(lastBlockBuff, buff_out[:lastBlockLength])
-				f_out.Write(lastBlockBuff)
-				//fmt.Println(i, string(lastBlockBuff), "===")
+				copy(lastBlockBuff, buffileOut[:lastBlockLength])
+				w.Write(lastBlockBuff)
+
 			} else {
-				//fmt.Println(i, string(buff_out))
-				f_out.Write(buff_out)
+
+				// Normal block (block size = cipher block size)
+				w.Write(buffileOut)
+
 			}
+
+			// Progression
 			if i%5000 == 0 {
 				fmt.Println(i, "/", nbBlocks)
 			}
 		}
+		w.Flush()
 
 	} else {
 
 		fmt.Println("Error during file decrypting: unable to instantiate deciphering engine.")
-		fmt.Println(err_c)
+		fmt.Println(errC)
 		os.Exit(1)
 
 	}
@@ -392,12 +409,5 @@ func main() {
 	elapsed := t1.Sub(t0)
 	fmt.Println("End of processing")
 	fmt.Printf("%v blocks decrypted in %v\n", nbBlocks, elapsed.String())
-
-	// Temp
-	if false {
-		color.FgGreen.Println(hex.EncodeToString(AESKeyData))
-		fmt.Println(publicKey)
-		res.PrintBytes("PK", privateKey)
-	}
 
 }

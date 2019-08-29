@@ -1,9 +1,9 @@
 package main
 
 import (
-	"boxcryptor/datafile"
-	"boxcryptor/exportkey"
-	"boxcryptor/res"
+	"boxcryptor-decryptor-go/datafile"
+	"boxcryptor-decryptor-go/exportkey"
+	"boxcryptor-decryptor-go/res"
 	"bufio"
 	"crypto/aes"
 	"crypto/cipher"
